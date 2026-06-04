@@ -1,10 +1,10 @@
 // ========== 数据存储 ==========
 const STORE_KEY = 'card-formation-data-v1';
 const QUALITY_LEVELS = [
-  { key: 'extraordinary', name: '超凡', rank: 4, color: '#d4af37' },
-  { key: 'epic', name: '史诗', rank: 3, color: '#8e44ad' },
-  { key: 'excellent', name: '优秀', rank: 2, color: '#3498db' },
-  { key: 'normal', name: '普通', rank: 1, color: '#27ae60' },
+  { key: 'extraordinary', name: '超凡', rank: 4, color: '#d4af37', rgb: [212, 175, 55] },
+  { key: 'epic', name: '史诗', rank: 3, color: '#8e44ad', rgb: [142, 68, 173] },
+  { key: 'excellent', name: '优秀', rank: 2, color: '#3498db', rgb: [52, 152, 219] },
+  { key: 'normal', name: '普通', rank: 1, color: '#27ae60', rgb: [39, 174, 96] },
 ];
 const DEFAULT_QUALITY = 'normal';
 
@@ -108,24 +108,94 @@ function rgbToHsl(r, g, b) {
 
 function classifyQualityByColor(r, g, b) {
   const { h, s, l } = rgbToHsl(r, g, b);
-  if (s < 0.18 || l < 0.16) return '';
-  if (h >= 32 && h <= 58 && r > 145 && g > 100) return 'extraordinary';
-  if (h >= 250 && h <= 315 && (r > 80 || b > 100)) return 'epic';
-  if (h >= 185 && h <= 230 && b > 100) return 'excellent';
-  if (h >= 75 && h <= 165 && g > 95) return 'normal';
-  return '';
+  if (s < 0.2 || l < 0.12 || l > 0.9) return '';
+  const closest = QUALITY_LEVELS
+    .map(q => {
+      const [qr, qg, qb] = q.rgb;
+      const dr = (r - qr) / 255;
+      const dg = (g - qg) / 255;
+      const db = (b - qb) / 255;
+      return { key: q.key, distance: Math.sqrt(dr * dr + dg * dg + db * db) };
+    })
+    .sort((a, b2) => a.distance - b2.distance)[0];
+  if (closest.distance > 0.48) return '';
+  if (h >= 28 && h <= 62 && r > 125 && g > 90 && b < 135) return 'extraordinary';
+  if (h >= 250 && h <= 320 && b > 95) return 'epic';
+  if (h >= 185 && h <= 235 && b > 110) return 'excellent';
+  if (h >= 75 && h <= 165 && g > 90) return 'normal';
+  return closest.key;
+}
+
+function colorBucket(r, g, b) {
+  return [
+    Math.round(r / 12) * 12,
+    Math.round(g / 12) * 12,
+    Math.round(b / 12) * 12,
+  ].join(',');
+}
+
+function median(values) {
+  if (!values.length) return 0;
+  const sorted = [...values].sort((a, b) => a - b);
+  return sorted[Math.floor(sorted.length / 2)];
+}
+
+function representativeColor(pixels) {
+  const buckets = new Map();
+  pixels.forEach(p => {
+    const key = colorBucket(p.r, p.g, p.b);
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(p);
+  });
+  let best = [];
+  for (const group of buckets.values()) {
+    if (group.length > best.length) best = group;
+  }
+  if (!best.length) return null;
+  return {
+    r: median(best.map(p => p.r)),
+    g: median(best.map(p => p.g)),
+    b: median(best.map(p => p.b)),
+    count: best.length,
+  };
+}
+
+function collectBackgroundPixels(ctx, w, h) {
+  const pixels = [];
+  const step = Math.max(2, Math.floor(Math.min(w, h) / 28));
+  const regions = [
+    [0, 0, w * 0.24, h * 0.24],
+    [w * 0.76, 0, w, h * 0.24],
+    [0, h * 0.76, w * 0.24, h],
+    [w * 0.76, h * 0.76, w, h],
+    [0, 0, w, h * 0.16],
+    [0, h * 0.84, w, h],
+    [0, 0, w * 0.16, h],
+    [w * 0.84, 0, w, h],
+  ];
+  for (const [x1, y1, x2, y2] of regions) {
+    for (let y = Math.floor(y1); y < y2; y += step) {
+      for (let x = Math.floor(x1); x < x2; x += step) {
+        const [r, g, b, a] = ctx.getImageData(x, y, 1, 1).data;
+        if (a < 180) continue;
+        const { s, l } = rgbToHsl(r, g, b);
+        if (s < 0.16 || l < 0.12 || l > 0.92) continue;
+        pixels.push({ r, g, b });
+      }
+    }
+  }
+  return pixels;
 }
 
 function sampleQualityFromCanvas(ctx, w, h) {
-  const points = [];
-  const stepX = Math.max(1, Math.floor(w / 8));
-  const stepY = Math.max(1, Math.floor(h / 8));
-  for (let x = 0; x < w; x += stepX) {
-    points.push([x, 0], [x, h - 1]);
-  }
-  for (let y = 0; y < h; y += stepY) {
-    points.push([0, y], [w - 1, y]);
-  }
+  const bg = representativeColor(collectBackgroundPixels(ctx, w, h));
+  if (bg && bg.count >= 4) return classifyQualityByColor(bg.r, bg.g, bg.b);
+
+  const points = [
+    [1, 1], [w - 2, 1], [1, h - 2], [w - 2, h - 2],
+    [Math.floor(w / 2), 1], [Math.floor(w / 2), h - 2],
+    [1, Math.floor(h / 2)], [w - 2, Math.floor(h / 2)],
+  ];
   const votes = new Map();
   for (const [x, y] of points) {
     const [r, g, b, a] = ctx.getImageData(x, y, 1, 1).data;
@@ -317,6 +387,8 @@ const heroClassSel = document.getElementById('heroClass');
 const heroQualitySel = document.getElementById('heroQuality');
 const heroAvatarInput = document.getElementById('heroAvatar');
 const heroListEl = document.getElementById('heroList');
+const heroEditStatusEl = document.getElementById('heroEditStatus');
+const saveHeroBtn = document.getElementById('saveHeroBtn');
 
 heroAvatarInput.addEventListener('change', async e => {
   const f = e.target.files[0];
@@ -398,17 +470,40 @@ function renderHeroes() {
     heroListEl.appendChild(el);
   });
 }
+
+function setHeroEditMode(hero = null) {
+  if (hero) {
+    editingHeroId = hero.id;
+    heroNameInput.value = hero.name;
+    heroClassSel.value = hero.classId || '';
+    heroQualitySel.value = getQualityInfo(hero.quality).key;
+    pendingHeroAvatar = hero.avatar || null;
+    heroAvatarInput.value = '';
+    saveHeroBtn.textContent = '更新英雄';
+    heroEditStatusEl.style.display = '';
+    heroEditStatusEl.textContent = `正在编辑：${hero.name}`;
+    heroNameInput.closest('.panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => heroNameInput.focus(), 120);
+    return;
+  }
+  editingHeroId = null;
+  pendingHeroAvatar = null;
+  heroNameInput.value = '';
+  heroClassSel.value = '';
+  heroQualitySel.value = DEFAULT_QUALITY;
+  heroAvatarInput.value = '';
+  saveHeroBtn.textContent = '保存';
+  heroEditStatusEl.style.display = 'none';
+  heroEditStatusEl.textContent = '';
+}
+
 heroListEl.addEventListener('click', e => {
   const editId = e.target.dataset.edit;
   const delId = e.target.dataset.del;
   if (editId) {
     const h = store.heroes.find(x => x.id === editId);
-    editingHeroId = h.id;
-    heroNameInput.value = h.name;
-    heroClassSel.value = h.classId || '';
-    heroQualitySel.value = getQualityInfo(h.quality).key;
-    pendingHeroAvatar = h.avatar || null;
-    heroAvatarInput.value = '';
+    if (!h) return;
+    setHeroEditMode(h);
     toast('已载入「' + h.name + '」，修改后再次保存', 'info');
   }
   if (delId) {
@@ -417,7 +512,7 @@ heroListEl.addEventListener('click', e => {
     saveStore(); renderHeroes(); refreshManualIfReady();
   }
 });
-document.getElementById('saveHeroBtn').onclick = () => {
+saveHeroBtn.onclick = () => {
   const name = heroNameInput.value.trim();
   if (!name) return alert('请输入英雄名');
   const classId = heroClassSel.value;
@@ -432,13 +527,11 @@ document.getElementById('saveHeroBtn').onclick = () => {
     }
     store.heroes.push({ id: uid(), name, classId, quality, avatar: pendingHeroAvatar });
   }
-  editingHeroId = null; pendingHeroAvatar = null;
-  heroNameInput.value = ''; heroClassSel.value = ''; heroQualitySel.value = DEFAULT_QUALITY; heroAvatarInput.value = '';
+  setHeroEditMode(null);
   saveStore(); renderHeroes(); refreshManualIfReady();
 };
 document.getElementById('resetHeroBtn').onclick = () => {
-  editingHeroId = null; pendingHeroAvatar = null;
-  heroNameInput.value = ''; heroClassSel.value = ''; heroQualitySel.value = DEFAULT_QUALITY; heroAvatarInput.value = '';
+  setHeroEditMode(null);
 };
 
 // ========== 英雄批量导入 ==========
@@ -577,6 +670,8 @@ const petNameInput = document.getElementById('petName');
 const petQualitySel = document.getElementById('petQuality');
 const petAvatarInput = document.getElementById('petAvatar');
 const petListEl = document.getElementById('petList');
+const petEditStatusEl = document.getElementById('petEditStatus');
+const savePetBtn = document.getElementById('savePetBtn');
 
 petAvatarInput.addEventListener('change', async e => {
   const f = e.target.files[0];
@@ -609,16 +704,38 @@ function renderPets() {
     petListEl.appendChild(el);
   });
 }
+
+function setPetEditMode(pet = null) {
+  if (pet) {
+    editingPetId = pet.id;
+    petNameInput.value = pet.name;
+    petQualitySel.value = getQualityInfo(pet.quality).key;
+    pendingPetAvatar = pet.avatar || null;
+    petAvatarInput.value = '';
+    savePetBtn.textContent = '更新宠物';
+    petEditStatusEl.style.display = '';
+    petEditStatusEl.textContent = `正在编辑：${pet.name}`;
+    petNameInput.closest('.panel')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    setTimeout(() => petNameInput.focus(), 120);
+    return;
+  }
+  editingPetId = null;
+  pendingPetAvatar = null;
+  petNameInput.value = '';
+  petQualitySel.value = DEFAULT_QUALITY;
+  petAvatarInput.value = '';
+  savePetBtn.textContent = '保存';
+  petEditStatusEl.style.display = 'none';
+  petEditStatusEl.textContent = '';
+}
+
 petListEl.addEventListener('click', e => {
   const editId = e.target.dataset.edit;
   const delId = e.target.dataset.del;
   if (editId) {
     const p = store.pets.find(x => x.id === editId);
-    editingPetId = p.id;
-    petNameInput.value = p.name;
-    petQualitySel.value = getQualityInfo(p.quality).key;
-    pendingPetAvatar = p.avatar || null;
-    petAvatarInput.value = '';
+    if (!p) return;
+    setPetEditMode(p);
     toast('已载入「' + p.name + '」，修改后再次保存', 'info');
   }
   if (delId) {
@@ -627,7 +744,7 @@ petListEl.addEventListener('click', e => {
     saveStore(); renderPets();
   }
 });
-document.getElementById('savePetBtn').onclick = () => {
+savePetBtn.onclick = () => {
   const name = petNameInput.value.trim();
   if (!name) return alert('请输入宠物名');
   const quality = getQualityInfo(petQualitySel.value).key;
@@ -639,13 +756,11 @@ document.getElementById('savePetBtn').onclick = () => {
   } else {
     store.pets.push({ id: uid(), name, quality, avatar: pendingPetAvatar });
   }
-  editingPetId = null; pendingPetAvatar = null;
-  petNameInput.value = ''; petQualitySel.value = DEFAULT_QUALITY; petAvatarInput.value = '';
+  setPetEditMode(null);
   saveStore(); renderPets();
 };
 document.getElementById('resetPetBtn').onclick = () => {
-  editingPetId = null; pendingPetAvatar = null;
-  petNameInput.value = ''; petQualitySel.value = DEFAULT_QUALITY; petAvatarInput.value = '';
+  setPetEditMode(null);
 };
 
 document.getElementById('petBulkBtn').onclick = async () => {

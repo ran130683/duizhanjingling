@@ -61,6 +61,16 @@ button.danger { background: #e74c3c; }
 button.danger:hover { background: #c0392b; }
 
 .hint { color: #aaa; font-size: 13px; margin-bottom: 10px; }
+.edit-status {
+  margin-bottom: 10px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  background: rgba(255,209,102,.12);
+  border: 1px solid rgba(255,209,102,.28);
+  color: #ffd166;
+  font-size: 13px;
+  font-weight: 700;
+}
 
 /* 列表 */
 .grid-list {
