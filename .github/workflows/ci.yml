@@ -16,4 +16,6 @@ jobs:
           node-version: "22"
 
       - name: Check JavaScript syntax
-        run: node --check app.js
+        run: |
+          node --check app.js
+          node --check server.js

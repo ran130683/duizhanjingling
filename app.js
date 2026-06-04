@@ -88,6 +88,22 @@ function inferQualityFromText(text = '') {
   return hit?.key || '';
 }
 
+async function persistAvatar(kind, id, name, avatar) {
+  if (!avatar || !avatar.startsWith('data:image/')) return avatar;
+  try {
+    const res = await fetch('/api/assets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind, id, name, dataUrl: avatar }),
+    });
+    if (!res.ok) throw new Error('asset api unavailable');
+    const data = await res.json();
+    return data.url || avatar;
+  } catch (e) {
+    return avatar;
+  }
+}
+
 function rgbToHsl(r, g, b) {
   r /= 255; g /= 255; b /= 255;
   const max = Math.max(r, g, b), min = Math.min(r, g, b);
@@ -512,7 +528,7 @@ heroListEl.addEventListener('click', e => {
     saveStore(); renderHeroes(); refreshManualIfReady();
   }
 });
-saveHeroBtn.onclick = () => {
+saveHeroBtn.onclick = async () => {
   const name = heroNameInput.value.trim();
   if (!name) return alert('请输入英雄名');
   const classId = heroClassSel.value;
@@ -520,12 +536,14 @@ saveHeroBtn.onclick = () => {
   if (editingHeroId) {
     const h = store.heroes.find(x => x.id === editingHeroId);
     h.name = name; h.classId = classId; h.quality = quality;
-    if (pendingHeroAvatar) h.avatar = pendingHeroAvatar;
+    if (pendingHeroAvatar) h.avatar = await persistAvatar('hero', h.id, name, pendingHeroAvatar);
   } else {
     if (store.heroes.find(h => h.name === name)) {
       if (!confirm('已存在同名英雄，仍要新增？')) return;
     }
-    store.heroes.push({ id: uid(), name, classId, quality, avatar: pendingHeroAvatar });
+    const id = uid();
+    const avatar = await persistAvatar('hero', id, name, pendingHeroAvatar);
+    store.heroes.push({ id, name, classId, quality, avatar });
   }
   setHeroEditMode(null);
   saveStore(); renderHeroes(); refreshManualIfReady();
@@ -618,7 +636,7 @@ async function bulkImport({ files, classId, overwrite, kind, logEl }) {
       const finalClassId = parsedClassId || classId || '';
       if (exist) {
         if (overwrite) {
-          exist.avatar = processedImage.avatar;
+          exist.avatar = await persistAvatar(kind, exist.id, name, processedImage.avatar);
           exist.quality = finalQuality;
           if (kind === 'hero' && finalClassId) exist.classId = finalClassId;
           updated++;
@@ -626,10 +644,12 @@ async function bulkImport({ files, classId, overwrite, kind, logEl }) {
           skipped++;
         }
       } else {
+        const id = uid();
+        const avatar = await persistAvatar(kind, id, name, processedImage.avatar);
         if (kind === 'hero') {
-          store.heroes.push({ id: uid(), name, classId: finalClassId, quality: finalQuality, avatar: processedImage.avatar });
+          store.heroes.push({ id, name, classId: finalClassId, quality: finalQuality, avatar });
         } else {
-          store.pets.push({ id: uid(), name, quality: finalQuality, avatar: processedImage.avatar });
+          store.pets.push({ id, name, quality: finalQuality, avatar });
         }
         added++;
       }
@@ -744,7 +764,7 @@ petListEl.addEventListener('click', e => {
     saveStore(); renderPets();
   }
 });
-savePetBtn.onclick = () => {
+savePetBtn.onclick = async () => {
   const name = petNameInput.value.trim();
   if (!name) return alert('请输入宠物名');
   const quality = getQualityInfo(petQualitySel.value).key;
@@ -752,9 +772,11 @@ savePetBtn.onclick = () => {
     const p = store.pets.find(x => x.id === editingPetId);
     p.name = name;
     p.quality = quality;
-    if (pendingPetAvatar) p.avatar = pendingPetAvatar;
+    if (pendingPetAvatar) p.avatar = await persistAvatar('pet', p.id, name, pendingPetAvatar);
   } else {
-    store.pets.push({ id: uid(), name, quality, avatar: pendingPetAvatar });
+    const id = uid();
+    const avatar = await persistAvatar('pet', id, name, pendingPetAvatar);
+    store.pets.push({ id, name, quality, avatar });
   }
   setPetEditMode(null);
   saveStore(); renderPets();

@@ -10,9 +10,16 @@
 - 用户根据每关阵容代码，自动生成 4×5 棋盘阵容图
 - 支持英雄 / 宠物 / 职业资源管理
 - 单页面应用，浏览器 `localStorage` 持久化，**点开即用**
-- 文件结构：`index.html` + `style.css` + `app.js`，外加 CDN 引入 `html2canvas`
+- 可选本地 Node 服务把导入头像保存到项目目录 `assets/heroes`、`assets/pets`
+- 文件结构：`index.html` + `style.css` + `app.js` + `server.js`，外加 CDN 引入 `html2canvas`
 
-启动方式（推荐）：
+启动方式（推荐，可持久化头像文件）：
+```bash
+cd card-formation && node server.js
+# 访问 http://localhost:8080
+```
+
+纯静态启动方式（不写项目目录，头像仍存 localStorage/base64）：
 ```bash
 cd card-formation && python3 -m http.server 8080
 # 访问 http://localhost:8080
@@ -39,19 +46,23 @@ cd card-formation && python3 -m http.server 8080
 ### 3.1 存储位置
 - `localStorage` key：`card-formation-data-v1`
 - 主题偏好 key：`card-formation-theme`
+- 使用 `node server.js` 启动时，导入 / 保存头像文件会写入：
+  - 英雄：`assets/heroes`
+  - 宠物：`assets/pets`
 
 ### 3.2 数据结构
 ```js
 {
   classes: [{ id, name, color }],         // 职业
-  heroes:  [{ id, name, classId, avatar }], // 英雄（avatar = base64）
-  pets:    [{ id, name, avatar }],          // 宠物
+  heroes:  [{ id, name, classId, quality, avatar }], // avatar = base64 或 /assets/heroes 路径
+  pets:    [{ id, name, quality, avatar }],           // avatar = base64 或 /assets/pets 路径
 }
 ```
 
 ### 3.3 容量与压缩
 - 所有上传 / 导入的图片**自动压缩**：最大边 200px，WebP/JPEG 0.85
-- 单张头像约 5–15KB，可容纳 ~300 个英雄
+- 使用 `node server.js` 时，压缩后的头像保存为项目目录文件，可显著降低 localStorage 占用
+- 纯静态模式下单张头像约 5–15KB，可容纳 ~300 个英雄
 - `localStorage.setItem` 失败时**显式弹窗**提示原因（容量满 / `file://` 协议禁用），不静默丢失
 
 ---
