@@ -1,0 +1,171 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<title>自走棋阵容生成器</title>
+<script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div class="app">
+  <header>
+    <h1>🎴 自走棋阵容生成器</h1>
+    <nav>
+      <button data-tab="formation" class="active">阵容生成</button>
+      <button data-tab="manual">手动布阵</button>
+      <button data-tab="heroes">英雄管理</button>
+      <button data-tab="pets">宠物管理</button>
+      <button data-tab="classes">职业管理</button>
+      <button data-tab="data">数据导入/导出</button>
+    </nav>
+  </header>
+
+  <!-- 阵容生成 -->
+  <section id="tab-formation" class="tab active">
+    <div class="panel">
+      <label>阵容代码：</label>
+      <textarea id="codeInput" rows="3" placeholder="例如: 1，鲛女544.先知512.剑仙542.法核514.软泥怪513.松鼠545|8，鲛女045.人马545"></textarea>
+      <div class="row">
+        <button id="parseBtn" class="primary">解析渲染</button>
+        <select id="stageSelect"></select>
+        <button id="exportBtn">复制当前关</button>
+        <button id="exportAllBtn">复制全部阵容</button>
+        <button id="downloadAllBtn">下载全部阵容</button>
+      </div>
+    </div>
+    <div id="formationHeader" class="formation-header" style="display:none">
+      <input id="formationTitle" class="formation-title-input" placeholder="阵容名（可点击修改）" />
+      <div class="theme-switcher">
+        <span class="theme-label">棋盘风格：</span>
+        <button class="theme-btn active" data-theme="chess-classic" title="国际象棋经典">经典</button>
+        <button class="theme-btn" data-theme="chess-green" title="国际象棋绿">深绿</button>
+        <button class="theme-btn" data-theme="chess-blue" title="蓝白冰原">蓝白</button>
+        <button class="theme-btn" data-theme="chess-purple" title="紫水晶">紫晶</button>
+        <button class="theme-btn" data-theme="wood" title="原木">原木</button>
+        <button class="theme-btn" data-theme="neon" title="赛博霓虹">霓虹</button>
+        <button class="theme-btn" data-theme="dark" title="暗夜">暗夜</button>
+      </div>
+    </div>
+    <div id="boardsContainer"></div>
+  </section>
+
+  <!-- 手动布阵 -->
+  <section id="tab-manual" class="tab">
+    <div class="manual-toolbar panel">
+      <div class="manual-title-row">
+        <input id="manualTitle" class="formation-title-input" value="我的手动阵容" />
+        <div class="row">
+          <button id="manualAddStageBtn" class="primary">添加关卡</button>
+          <button id="manualCopyImageBtn">复制阵容图</button>
+          <button id="manualGenerateCodeBtn">生成阵容脚本</button>
+          <button id="manualClearBtn" class="danger">清空布阵</button>
+        </div>
+      </div>
+      <p class="hint">从右侧英雄池拖动头像到棋盘格。再次拖入同一格会替换；点击格子里的英雄可移除。每个关卡可单独设置关卡数。</p>
+    </div>
+
+    <div class="manual-layout">
+      <div class="manual-board-area">
+        <div id="manualBoards" class="manual-boards theme-chess-classic"></div>
+      </div>
+      <aside class="manual-pool panel">
+        <h3>英雄池</h3>
+        <div id="manualClassFilter" class="class-filter"></div>
+        <div id="manualHeroPool" class="manual-hero-pool"></div>
+      </aside>
+    </div>
+
+    <div class="panel manual-code-panel">
+      <h3>阵容脚本</h3>
+      <textarea id="manualCodeOutput" rows="4" readonly placeholder="点击「生成阵容脚本」后显示"></textarea>
+      <div class="row">
+        <button id="manualCopyCodeBtn">复制脚本</button>
+        <button id="manualSendToParserBtn">发送到阵容生成</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- 英雄管理 -->
+  <section id="tab-heroes" class="tab">
+    <div class="panel">
+      <h3>添加 / 编辑英雄</h3>
+      <div class="form">
+        <input id="heroName" placeholder="英雄名称（如：鲛女）" />
+        <select id="heroClass"></select>
+        <select id="heroQuality"></select>
+        <input type="file" id="heroAvatar" accept="image/*" />
+        <button id="saveHeroBtn" class="primary">保存</button>
+        <button id="resetHeroBtn">清空</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>📁 批量导入（按文件夹）</h3>
+      <p class="hint">选择一个文件夹，文件名格式 <code>职业_英雄名.png</code>（分隔符支持 <code>_</code> / <code>-</code> / 空格）。例如 <code>战士_鲛女.png</code> 会被解析成英雄「鲛女」+ 职业「战士」。若职业不存在会自动创建（颜色随机）。无前缀时则只导入英雄名，使用下方默认职业。</p>
+      <div class="row">
+        <input type="file" id="heroBulkInput" webkitdirectory directory multiple />
+        <select id="heroBulkClass"><option value="">— 默认无职业 —</option></select>
+        <label><input type="checkbox" id="heroBulkOverwrite" checked /> 覆盖同名英雄头像</label>
+        <button id="heroBulkBtn" class="primary">开始导入</button>
+      </div>
+      <div id="heroBulkLog" class="hint" style="margin-top:8px"></div>
+    </div>
+    <div id="heroClassFilter" class="class-filter"></div>
+    <div id="heroList" class="grid-list"></div>
+  </section>
+
+  <!-- 宠物管理 -->
+  <section id="tab-pets" class="tab">
+    <div class="panel">
+      <h3>添加 / 编辑宠物</h3>
+      <div class="form">
+        <input id="petName" placeholder="宠物名称" />
+        <select id="petQuality"></select>
+        <input type="file" id="petAvatar" accept="image/*" />
+        <button id="savePetBtn" class="primary">保存</button>
+        <button id="resetPetBtn">清空</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h3>📁 批量导入（按文件夹）</h3>
+      <p class="hint">选择一个文件夹，里面的每张图片以「文件名（不含扩展名）」作为宠物名批量导入。</p>
+      <div class="row">
+        <input type="file" id="petBulkInput" webkitdirectory directory multiple />
+        <label><input type="checkbox" id="petBulkOverwrite" checked /> 覆盖同名宠物头像</label>
+        <button id="petBulkBtn" class="primary">开始导入</button>
+      </div>
+      <div id="petBulkLog" class="hint" style="margin-top:8px"></div>
+    </div>
+    <div id="petList" class="grid-list"></div>
+  </section>
+
+  <!-- 职业管理 -->
+  <section id="tab-classes" class="tab">
+    <div class="panel">
+      <h3>职业管理</h3>
+      <div class="form">
+        <input id="className" placeholder="职业名（如：刺客）" />
+        <input id="classColor" type="color" value="#5b8dee" />
+        <button id="saveClassBtn" class="primary">保存</button>
+        <button id="resetClassBtn">清空</button>
+      </div>
+    </div>
+    <div id="classList" class="grid-list"></div>
+  </section>
+
+  <!-- 数据导入导出 -->
+  <section id="tab-data" class="tab">
+    <div class="panel">
+      <h3>数据备份</h3>
+      <p class="hint">所有数据存在浏览器 localStorage 中。请定期导出备份，换设备/换浏览器需重新导入。</p>
+      <div class="row">
+        <button id="exportDataBtn">导出 JSON 备份</button>
+        <input type="file" id="importDataFile" accept="application/json" />
+        <button id="clearDataBtn" class="danger">清空所有数据</button>
+      </div>
+    </div>
+  </section>
+</div>
+
+<script src="app.js"></script>
+</body>
+</html>
