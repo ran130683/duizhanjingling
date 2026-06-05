@@ -763,7 +763,7 @@ petListEl.addEventListener('click', e => {
     store.pets = store.pets.filter(x => x.id !== delId);
     selectedFormationPetIds.delete(delId);
     saveStore(); renderPets(); renderFormationPetPicker();
-    if (lastRenderedStages) renderBoards(lastRenderedStages, { formationName: lastRenderedFormationName });
+    if (lastRenderedStages) renderBoards(lastRenderedStages, { formationName: lastRenderedFormationName, heroList: lastRenderedHeroList });
   }
 });
 savePetBtn.onclick = async () => {
@@ -782,7 +782,7 @@ savePetBtn.onclick = async () => {
   }
   setPetEditMode(null);
   saveStore(); renderPets(); renderFormationPetPicker();
-  if (lastRenderedStages) renderBoards(lastRenderedStages, { formationName: lastRenderedFormationName });
+  if (lastRenderedStages) renderBoards(lastRenderedStages, { formationName: lastRenderedFormationName, heroList: lastRenderedHeroList });
 };
 document.getElementById('resetPetBtn').onclick = () => {
   setPetEditMode(null);
@@ -911,6 +911,7 @@ applyTheme(localStorage.getItem(THEME_KEY) || 'chess-classic');
 // ========== 棋盘渲染 ==========
 let lastRenderedStages = null;
 let lastRenderedFormationName = '';
+let lastRenderedHeroList = null;
 const selectedFormationPetIds = new Set();
 
 function renderFormationPetPicker() {
@@ -962,10 +963,61 @@ function buildSelectedPetsBlock() {
   `;
 }
 
+function uniqueNames(names) {
+  const seen = new Set();
+  return names.filter(name => {
+    const clean = String(name || '').trim();
+    if (!clean || seen.has(clean)) return false;
+    seen.add(clean);
+    return true;
+  });
+}
+
+function getFormationHeroNames(stages, heroList) {
+  const fromWhitelist = uniqueNames(heroList || []);
+  const names = fromWhitelist.length
+    ? fromWhitelist
+    : uniqueNames(stages.flatMap(stage => [...stage.board.keys()]));
+  const fillers = ['光', '幻', '岩', '木灵'];
+  for (const filler of fillers) {
+    if (names.length >= 10) break;
+    if (!names.includes(filler)) names.push(filler);
+  }
+  return names.slice(0, 10);
+}
+
+function buildLineupSummary(stages, heroList) {
+  const names = getFormationHeroNames(stages, heroList);
+  const heroesHtml = names.map(name => {
+    const hero = store.heroes.find(x => x.name === name);
+    const cls = hero ? store.classes.find(c => c.id === hero.classId) : null;
+    const classColor = cls?.color || '#5b8dee';
+    const quality = getQualityInfo(hero?.quality);
+    const avatar = hero?.avatar
+      ? `<img src="${hero.avatar}" alt="${name}">`
+      : `<span class="lineup-placeholder" style="background:${quality.color}">${name[0] || '?'}</span>`;
+    return `
+      <div class="lineup-hero" style="--class-color:${classColor};--quality-color:${quality.color}" title="${quality.name} ${name}">
+        ${avatar}
+        <span>${name}</span>
+      </div>
+    `;
+  }).join('');
+  const petsBlock = buildSelectedPetsBlock();
+  return `
+    <div class="formation-summary board-wrapper">
+      <div class="board-title">上阵英雄表</div>
+      <div class="lineup-grid">${heroesHtml}</div>
+      ${petsBlock}
+    </div>
+  `;
+}
+
 function renderBoards(stages, opts = {}) {
-  const { formationName = '' } = opts;
+  const { formationName = '', heroList = null } = opts;
   lastRenderedStages = stages;
   lastRenderedFormationName = formationName;
+  lastRenderedHeroList = heroList;
   const container = document.getElementById('boardsContainer');
   container.innerHTML = '';
   const stageSelect = document.getElementById('stageSelect');
@@ -1029,8 +1081,6 @@ function renderBoards(stages, opts = {}) {
       }
     }
     wrapper.appendChild(board);
-    const petsBlock = buildSelectedPetsBlock();
-    if (petsBlock) wrapper.insertAdjacentHTML('beforeend', petsBlock);
 
     // 变化提示
     if (hasChanges) {
@@ -1055,6 +1105,7 @@ function renderBoards(stages, opts = {}) {
 
     container.appendChild(wrapper);
   });
+  container.insertAdjacentHTML('beforeend', buildLineupSummary(stages, heroList));
 }
 
 // 构建一个英雄小芯片（含头像 + 名字）用于变化提示
@@ -1106,7 +1157,7 @@ document.getElementById('parseBtn').onclick = () => {
         `请检查阵容代码或在「英雄管理」补充对应英雄。`
       );
     }
-    renderBoards(stages, { formationName });
+    renderBoards(stages, { formationName, heroList });
   } catch (e) {
     alert('解析失败：' + e.message);
   }
@@ -1119,7 +1170,7 @@ document.getElementById('formationPetPicker')?.addEventListener('change', e => {
   else selectedFormationPetIds.delete(input.value);
   renderFormationPetPicker();
   if (lastRenderedStages) {
-    renderBoards(lastRenderedStages, { formationName: lastRenderedFormationName });
+    renderBoards(lastRenderedStages, { formationName: lastRenderedFormationName, heroList: lastRenderedHeroList });
   }
 });
 
