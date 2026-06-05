@@ -565,13 +565,10 @@ button.danger:hover { background: #c0392b; }
   border-radius: 10px;
   padding: 10px;
 }
-.formation-summary {
-  grid-column: 1 / -1;
-}
 .lineup-grid {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  gap: 8px;
+  gap: 6px;
 }
 .lineup-hero {
   position: relative;
@@ -673,26 +670,26 @@ button.danger:hover { background: #c0392b; }
 }
 .board-pet {
   display: inline-grid;
-  grid-template-columns: 28px minmax(0, auto);
+  grid-template-columns: 40px minmax(0, auto);
   align-items: center;
-  max-width: 108px;
-  gap: 4px;
-  padding: 3px 6px 3px 3px;
-  border-radius: 5px;
+  max-width: 132px;
+  gap: 6px;
+  padding: 4px 7px 4px 4px;
+  border-radius: 7px;
   border: 1px solid var(--quality-color, #27ae60);
   background: rgba(255,255,255,.06);
 }
 .board-pet img,
 .board-pet-placeholder {
-  width: 28px;
-  height: 28px;
-  border-radius: 5px;
+  width: 40px;
+  height: 40px;
+  border-radius: 7px;
   object-fit: cover;
   display: flex;
   align-items: center;
   justify-content: center;
   color: #fff;
-  font-size: 12px;
+  font-size: 14px;
   font-weight: 900;
 }
 .board-pet span:last-child {
@@ -700,7 +697,7 @@ button.danger:hover { background: #c0392b; }
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 12px;
   font-weight: 700;
   color: #fff;
 }
