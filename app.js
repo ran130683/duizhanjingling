@@ -663,7 +663,7 @@ async function bulkImport({ files, classId, overwrite, kind, logEl }) {
     logEl.textContent = '❌ 导入已处理，但保存失败。请导出备份或减少图片数量后重试。';
     return;
   }
-  if (kind === 'hero') { renderClasses(); renderHeroes(); refreshManualIfReady(); } else renderPets();
+  if (kind === 'hero') { renderClasses(); renderHeroes(); refreshManualIfReady(); } else { renderPets(); renderFormationPetPicker(); }
   const extra = kind === 'hero' && autoClass ? `，自动新建职业 ${autoClass}` : '';
   logEl.textContent = `✅ 完成：新增 ${added}，更新 ${updated}，跳过 ${skipped}${extra}`;
   toast(`✅ 批量导入完成：新增 ${added}，更新 ${updated}`, 'success');
@@ -761,7 +761,9 @@ petListEl.addEventListener('click', e => {
   if (delId) {
     if (!confirm('确认删除？')) return;
     store.pets = store.pets.filter(x => x.id !== delId);
-    saveStore(); renderPets();
+    selectedFormationPetIds.delete(delId);
+    saveStore(); renderPets(); renderFormationPetPicker();
+    if (lastRenderedStages) renderBoards(lastRenderedStages, { formationName: lastRenderedFormationName });
   }
 });
 savePetBtn.onclick = async () => {
@@ -779,7 +781,8 @@ savePetBtn.onclick = async () => {
     store.pets.push({ id, name, quality, avatar });
   }
   setPetEditMode(null);
-  saveStore(); renderPets();
+  saveStore(); renderPets(); renderFormationPetPicker();
+  if (lastRenderedStages) renderBoards(lastRenderedStages, { formationName: lastRenderedFormationName });
 };
 document.getElementById('resetPetBtn').onclick = () => {
   setPetEditMode(null);
@@ -906,8 +909,63 @@ themeBtns.forEach(btn => {
 applyTheme(localStorage.getItem(THEME_KEY) || 'chess-classic');
 
 // ========== 棋盘渲染 ==========
+let lastRenderedStages = null;
+let lastRenderedFormationName = '';
+const selectedFormationPetIds = new Set();
+
+function renderFormationPetPicker() {
+  const el = document.getElementById('formationPetPicker');
+  if (!el) return;
+  selectedFormationPetIds.forEach(id => {
+    if (!store.pets.some(p => p.id === id)) selectedFormationPetIds.delete(id);
+  });
+  const pets = sortByQualityThenName(store.pets);
+  if (!pets.length) {
+    el.innerHTML = '<div class="hint" style="margin:0">暂无宠物，请先到「宠物管理」导入或添加。</div>';
+    return;
+  }
+  el.innerHTML = pets.map(p => {
+    const quality = getQualityInfo(p.quality);
+    const checked = selectedFormationPetIds.has(p.id) ? 'checked' : '';
+    const avatar = p.avatar
+      ? `<img src="${p.avatar}" alt="${p.name}">`
+      : `<span class="pet-picker-placeholder" style="background:${quality.color}">${p.name[0] || '?'}</span>`;
+    return `
+      <label class="pet-picker-card" style="--quality-color:${quality.color}">
+        <input type="checkbox" value="${p.id}" ${checked}>
+        ${avatar}
+        <span class="pet-picker-name">${p.name}</span>
+        <span class="pet-picker-quality">${quality.name}</span>
+      </label>
+    `;
+  }).join('');
+}
+
+function buildSelectedPetsBlock() {
+  const pets = sortByQualityThenName([...selectedFormationPetIds]
+    .map(id => store.pets.find(p => p.id === id))
+    .filter(Boolean));
+  if (!pets.length) return '';
+  return `
+    <div class="board-pets">
+      <div class="board-pets-label">可上宠物</div>
+      <div class="board-pets-list">
+        ${pets.map(p => {
+          const quality = getQualityInfo(p.quality);
+          const avatar = p.avatar
+            ? `<img src="${p.avatar}" alt="${p.name}">`
+            : `<span class="board-pet-placeholder" style="background:${quality.color}">${p.name[0] || '?'}</span>`;
+          return `<div class="board-pet" style="--quality-color:${quality.color}" title="${quality.name} ${p.name}">${avatar}<span>${p.name}</span></div>`;
+        }).join('')}
+      </div>
+    </div>
+  `;
+}
+
 function renderBoards(stages, opts = {}) {
   const { formationName = '' } = opts;
+  lastRenderedStages = stages;
+  lastRenderedFormationName = formationName;
   const container = document.getElementById('boardsContainer');
   container.innerHTML = '';
   const stageSelect = document.getElementById('stageSelect');
@@ -971,6 +1029,8 @@ function renderBoards(stages, opts = {}) {
       }
     }
     wrapper.appendChild(board);
+    const petsBlock = buildSelectedPetsBlock();
+    if (petsBlock) wrapper.insertAdjacentHTML('beforeend', petsBlock);
 
     // 变化提示
     if (hasChanges) {
@@ -1051,6 +1111,17 @@ document.getElementById('parseBtn').onclick = () => {
     alert('解析失败：' + e.message);
   }
 };
+
+document.getElementById('formationPetPicker')?.addEventListener('change', e => {
+  const input = e.target.closest('input[type="checkbox"]');
+  if (!input) return;
+  if (input.checked) selectedFormationPetIds.add(input.value);
+  else selectedFormationPetIds.delete(input.value);
+  renderFormationPetPicker();
+  if (lastRenderedStages) {
+    renderBoards(lastRenderedStages, { formationName: lastRenderedFormationName });
+  }
+});
 
 // ========== 导出当前关图片 ==========
 // 把克隆树里 html2canvas 渲染失真的 inset box-shadow 移除，避免颜色偏暗发紫
@@ -1678,6 +1749,7 @@ document.getElementById('clearDataBtn').onclick = () => {
 renderClasses();
 renderHeroes();
 renderPets();
+renderFormationPetPicker();
 renderManualAll();
 
 // 默认填充示例代码
